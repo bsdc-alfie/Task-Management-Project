@@ -1,5 +1,5 @@
 <?php
-include 'C:\xampp\htdocs\Task-Management-Project\database/db_connect.php';
+include 'C:\xampp\htdocs\Task-Management-Project\database\db_connect.php';
 
 $message = "";
 $toastClass = "";
@@ -22,13 +22,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Prepare and bind
         $stmt = $conn->prepare("INSERT INTO userdata (username, email, password) VALUES (?, ?, ?)");
         $stmt->bind_param("sss", $username, $email, $password);
-
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $message = "Invalid Format";
+            $toastClass = "#dc3545"; // Primary color
+        } else {
         if ($stmt->execute()) {
             $message = "Account created successfully";
             $toastClass = "#28a745"; // yippee color
         } else {
             $message = "Error: " . $stmt->error;
             $toastClass = "#dc3545"; // bowomp color
+        }
         }
 
         $stmt->close();
