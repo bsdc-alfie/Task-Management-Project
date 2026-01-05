@@ -30,15 +30,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $message = "Error: " . $stmt->error;
             $toastClass = "#dc3545"; // bowomp color
         }
-
         $stmt->close();
     }
-
     $checkEmailStmt->close();
     $conn->close();
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 
@@ -47,13 +44,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href=
 "https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href=
-"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.css">
-    <link rel="shortcut icon" href=
-"https://cdn-icons-png.flaticon.com/512/295/295128.png">
     <script src=
 "https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
-    <title>Registration</title>
+<!--For some reason the js cant be read when put outside of the <body> (despite it working every other time ive done it)-->
+<title>Registration</title>
 </head>
 
 <body class="bg-light">
@@ -112,7 +106,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
         </form>
     </div>
-    <script>
+    <script> // toasty 🍞 
         let toastElList = [].slice.call(document.querySelectorAll('.toast'))
         let toastList = toastElList.map(function (toastEl) {
             return new bootstrap.Toast(toastEl, { delay: 3000 });
