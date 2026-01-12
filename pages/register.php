@@ -24,7 +24,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $stmt->bind_param("sss", $username, $email, $password);
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $message = "Invalid Format";
-            $toastClass = "#dc3545"; // Primary color
+            $toastClass = "#3591dcff"; // Primary color
         } else {
         if ($stmt->execute()) {
             $message = "Account created successfully";
@@ -47,10 +47,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href=
-"https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src=
-"https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 <!--For some reason the js cant be read when put outside of the <body> (despite it working every other time ive done it)-->
 <title>Registration</title>
 </head>
@@ -65,10 +63,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <div class="toast-body">
                         <?php echo $message; ?>
                     </div>
-                    <button type="button" class="btn-close
-                    btn-close-white me-2 m-auto" 
-                          data-bs-dismiss="toast"
-                        aria-label="Close"></button>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
                 </div>
             </div>
         <?php endif; ?>
@@ -89,14 +84,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="mb-2 mt-2">
                 <label for="email"><i 
                   class="fa fa-envelope"></i> Email</label>
-                <input type="text" name="email" id="email"
-                  class="form-control" required>
+                                <input type="text" name="email" id="email"
+                                    class="form-control" required>
             </div>
             <div class="mb-2 mt-2">
                 <label for="password"><i 
                   class="fa fa-lock"></i> Password</label>
-                <input type="text" name="password" id="password"
-                  class="form-control" required>
+                                <input type="text" name="password" id="password"
+                                    class="form-control" required>
             </div>
             <div class="mb-2 mt-3">
                 <button type="submit" 
