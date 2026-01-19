@@ -6,7 +6,7 @@ $toastClass ="";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = $_POST['email'];
-    $password = $_POST['password'];
+    $password = trim($_POST['password']);
 
     // Server-side email format validation
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -23,7 +23,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $stmt->bind_result($db_password);
             $stmt->fetch();
 
-            if (password_verify($password, $db_password)) {
+            // Check if password is hashed (starts with $) or plain text
+            $is_hashed = strpos($db_password, '$') === 0;
+            $password_match = false;
+            if ($is_hashed) {
+                $password_match = password_verify($password, $db_password);
+            } else {
+                $password_match = $password === trim($db_password);
+            }
+            // It finally works yay
+            if ($password_match) {
             $message = "Login Successful!";
             $toastClass = "bg-success"; // mmmmm green
             //This starts a session and sends you to the dashboard
@@ -53,6 +62,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta name="viewport" 
           content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/pages/main.css">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <title>Login Page</title>
 </head>
@@ -108,5 +118,5 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         toastList.forEach(toast => toast.show());
     </script>
 </body>
-
+-
 </html>

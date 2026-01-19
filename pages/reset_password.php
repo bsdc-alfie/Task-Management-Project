@@ -6,13 +6,16 @@ $toastClass = "";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = $_POST['email'];
-    $password = $_POST['password'];
-    $confirmPassword = $_POST['confirm_password'];
+    $password = trim($_POST['password']);
+    $confirmPassword = trim($_POST['confirm_password']);
 
     if ($password === $confirmPassword) {
+        // Hash the password
+        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+
         // Prepare and execute
         $stmt = $conn->prepare("UPDATE userdata SET password = ? WHERE email = ?");
-        $stmt->bind_param("ss", $password, $email);
+        $stmt->bind_param("ss", $hashed_password, $email);
 
         if ($stmt->execute()) {
             $message = "Password updated successfully";
@@ -41,6 +44,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
           content="width=device-width, 
                    initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/pages/main.css">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <title>Reset Password</title>

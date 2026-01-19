@@ -7,7 +7,10 @@ $toastClass = "";
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $username = $_POST['username'];
     $email = $_POST['email'];
-    $password = $_POST['password'];
+    $password = trim($_POST['password']);
+
+    // Hash the password
+    $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
     // Check if email already exists
     $checkEmailStmt = $conn->prepare("SELECT email FROM userdata WHERE email = ?");
@@ -17,14 +20,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     if ($checkEmailStmt->num_rows > 0) {
         $message = "Email ID already exists";
-        $toastClass = "#007bff"; // Primary color
+        $toastClass = "#007bff"; // normal color
     } else {
         // Prepare and bind
         $stmt = $conn->prepare("INSERT INTO userdata (username, email, password) VALUES (?, ?, ?)");
-        $stmt->bind_param("sss", $username, $email, $password);
+        $stmt->bind_param("sss", $username, $email, $hashed_password);
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $message = "Invalid Format";
-            $toastClass = "#3591dcff"; // Primary color
+            $toastClass = "rgb(255, 238, 0)"; // not quite right color
         } else {
         if ($stmt->execute()) {
             $message = "Account created successfully";
@@ -48,6 +51,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/pages/main.css">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 <!--For some reason the js cant be read when put outside of the <body> (despite it working every other time ive done it)-->
 <title>Registration</title>
