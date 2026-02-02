@@ -1,3 +1,14 @@
+<?php
+session_start();
+
+// Check if the user is logged in, if
+// not then redirect them to the login page
+if (!isset($_SESSION['email'])) {
+    header("Location: login.php");
+    exit();
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,7 +23,7 @@
         <tr>
             <th>Task Name</th>
             <th>Description</th>
-            <th>Date Created</th>
+            <th>Date Updated</th>
             <th>Due Date</th>
             <th>Actions</th>
         </tr>
@@ -31,5 +42,14 @@
         }
         ?>
     </table>
+    <div class="collapse navbar-collapse" id="collapsibleNavId">
+                <ul class="navbar-nav m-auto mt-2 mt-lg-0">
+                </ul>
+                <form class="d-flex my-2 my-lg-0">
+                    <a href="../pages/logout.php" class="btn btn-light my-2 my-sm-0"
+                      type="submit" style="font-weight:bolder;color:green;">
+                        logout</a>
+                </form>
+            </div>
 </body>
 </html>

@@ -38,7 +38,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             //This starts a session and sends you to the dashboard
             session_start();
             $_SESSION['email'] = $email;
-            header("Location: dashboard.php");
+            header("Location: ../tasks/index.php");
             exit();
         } else{
             $message = "Incorrect password";
