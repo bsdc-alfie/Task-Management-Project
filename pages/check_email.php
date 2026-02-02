@@ -1,5 +1,5 @@
 <?php
-include 'C:\xampp\htdocs\Task-Management-Project\database\db_connect.php';
+include '../database/db_connect.php';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = $_POST['email'];

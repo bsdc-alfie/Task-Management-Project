@@ -1,122 +1,372 @@
 <?php
-include 'C:\xampp\htdocs\Task-Management-Project\database\db_connect.php';
+include '../database/db_connect.php';
 
 $message = "";
 $toastClass = "";
 
+// Helper: map to Bootstrap toast classes
+function setToast($type) {
+    // type: success, danger, warning, primary
+    return "bg-" . $type;
+}
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $username = $_POST['username'];
-    $email = $_POST['email'];
-    $password = trim($_POST['password']);
+    $username = $_POST['username'] ?? '';
+    $email = $_POST['email'] ?? '';
+    $password = trim($_POST['password'] ?? '');
 
-    // Hash the password
-    $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-
-    // Check if email already exists
-    $checkEmailStmt = $conn->prepare("SELECT email FROM userdata WHERE email = ?");
-    $checkEmailStmt->bind_param("s", $email);
-    $checkEmailStmt->execute();
-    $checkEmailStmt->store_result();
-
-    if ($checkEmailStmt->num_rows > 0) {
-        $message = "Email ID already exists";
-        $toastClass = "#007bff"; // normal color
+    // Basic validation
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $message = "Invalid email format";
+        $toastClass = setToast("warning");
     } else {
-        // Prepare and bind
-        $stmt = $conn->prepare("INSERT INTO userdata (username, email, password) VALUES (?, ?, ?)");
-        $stmt->bind_param("sss", $username, $email, $hashed_password);
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $message = "Invalid Format";
-            $toastClass = "rgb(255, 238, 0)"; // not quite right color
+        // Check if email already exists
+        $checkEmailStmt = $conn->prepare("SELECT email FROM userdata WHERE email = ?");
+        $checkEmailStmt->bind_param("s", $email);
+        $checkEmailStmt->execute();
+        $checkEmailStmt->store_result();
+
+        if ($checkEmailStmt->num_rows > 0) {
+            $message = "Email already exists";
+            $toastClass = setToast("primary");
         } else {
-        if ($stmt->execute()) {
-            $message = "Account created successfully";
-            $toastClass = "#28a745"; // yippee color
-        } else {
-            $message = "Error: " . $stmt->error;
-            $toastClass = "#dc3545"; // bowomp color
-        }
+            // Hash password + insert
+            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+
+            $stmt = $conn->prepare("INSERT INTO userdata (username, email, password) VALUES (?, ?, ?)");
+            $stmt->bind_param("sss", $username, $email, $hashed_password);
+
+            if ($stmt->execute()) {
+                $message = "Account created successfully";
+                $toastClass = setToast("success");
+            } else {
+                $message = "Error: " . $stmt->error;
+                $toastClass = setToast("danger");
+            }
+
+            $stmt->close();
         }
 
-        $stmt->close();
+        $checkEmailStmt->close();
+        $conn->close();
     }
-    $checkEmailStmt->close();
-    $conn->close();
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/pages/main.css">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
-<!--For some reason the js cant be read when put outside of the <body> (despite it working every other time ive done it)-->
-<title>Registration</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Account</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <style>
+    :root {
+      /* Light theme */
+      --card-bg: rgba(255,255,255,0.78);
+      --card-border: rgba(255,255,255,0.55);
+      --text: #111827;
+      --muted: #6b7280;
+      --input-bg: rgba(255,255,255,0.85);
+      --input-border: rgba(17,24,39,0.12);
+      --shadow: 0 20px 60px rgba(0,0,0,0.18);
+      --btn: #111827;
+      --btn-text: #ffffff;
+      --link: #111827;
+      --chip: rgba(17,24,39,0.08);
+    }
+
+    [data-theme="dark"] {
+      /* Dark theme */
+      --card-bg: rgba(17,24,39,0.72);
+      --card-border: rgba(255,255,255,0.10);
+      --text: #f9fafb;
+      --muted: rgba(249,250,251,0.72);
+      --input-bg: rgba(17,24,39,0.55);
+      --input-border: rgba(255,255,255,0.14);
+      --shadow: 0 20px 60px rgba(0,0,0,0.55);
+      --btn: #f9fafb;
+      --btn-text: #111827;
+      --link: #f9fafb;
+      --chip: rgba(255,255,255,0.10);
+    }
+
+    /* Full-page animated grey/white background */
+    body {
+      min-height: 100vh;
+      margin: 0;
+      color: var(--text);
+      overflow-x: hidden;
+      display: grid;
+      place-items: center;
+      padding: 28px 16px;
+
+      background: linear-gradient(120deg,
+        rgb(50, 72, 117),
+        #324875,
+        #123c8f,
+        #093969,
+        #144577
+      );
+      background-size: 400% 400%;
+      animation: bgmove 10s ease infinite;
+      background-size: 400% 400%;
+      animation: bgMove 16s ease infinite;
+    }
+
+    @keyframes bgMove {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    /* Soft animated blobs (grey/white) */
+    .bg-blobs {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(48px);
+      opacity: 0.75;
+    }
+    .blob {
+      position: absolute;
+      width: 420px;
+      height: 420px;
+      border-radius: 999px;
+      background: radial-gradient(circle at 30% 30%, #324875 10%, #e5e7eb 45%, rgba(229,231,235,0) 70%);
+      animation: floaty 18s ease-in-out infinite;
+      mix-blend-mode: soft-light;
+    }
+    .blob.b1 { top: -120px; left: -120px; animation-duration: 20s; }
+    .blob.b2 { bottom: -150px; right: -140px; animation-duration: 22s; }
+    .blob.b3 { top: 20%; right: -180px; width: 520px; height: 520px; animation-duration: 26s; }
+    .blob.b4 { bottom: 18%; left: -180px; width: 520px; height: 520px; animation-duration: 24s; }
+
+    @keyframes floaty {
+      0%, 100% { transform: translate(0,0) scale(1); }
+      50% { transform: translate(40px, -30px) scale(1.08); }
+    }
+
+    /* Subtle noise overlay for texture */
+    .noise {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.08;
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+    }
+
+    /* Card */
+    .wrap {
+      width: 100%;
+      max-width: 440px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .auth-card {
+      border-radius: 16px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      padding: 26px;
+    }
+
+    .title {
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+      text-align: center;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+      margin-bottom: 18px;
+    }
+
+    label { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+
+    .form-control {
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+
+    /*  Focus fix: keep same bg in dark mode */
+    .form-control:focus {
+      background: var(--input-bg) !important;
+      color: var(--text) !important;
+      box-shadow: none !important;
+      border-color: var(--input-border) !important;
+    }
+
+    /* ✅ Chrome autofill fix */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus {
+      -webkit-text-fill-color: var(--text) !important;
+      transition: background-color 9999s ease-out 0s;
+      box-shadow: 0 0 0px 1000px var(--input-bg) inset !important;
+    }
+
+    .btn-main {
+      border-radius: 12px;
+      font-weight: 800;
+      padding: 10px 12px;
+      background: var(--btn);
+      color: var(--btn-text);
+      border: none;
+      width: 100%;
+    }
+    .btn-main:hover { filter: brightness(0.94); }
+
+    .links {
+      text-align: center;
+      margin-top: 12px;
+      font-weight: 800;
+      font-size: 14px;
+    }
+    .links a {
+      color: var(--link);
+      text-decoration: none;
+      border-bottom: 1px dashed rgba(0,0,0,0.25);
+    }
+    [data-theme="dark"] .links a {
+      border-bottom-color: rgba(255,255,255,0.25);
+    }
+
+    /* Dark mode toggle button */
+    .theme-toggle {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 2;
+      border: none;
+      border-radius: 999px;
+      padding: 10px 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+      font-weight: 900;
+      color: var(--text);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    /* Toast positioning */
+    .toast-wrap {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      z-index: 2000;
+      width: 420px;
+      max-width: calc(100% - 36px);
+    }
+  </style>
 </head>
 
-<body class="bg-light">
-    <div class="container p-5 d-flex flex-column align-items-center">
-        <?php if ($message): ?>
-            <div class="toast align-items-center text-white border-0" 
-          role="alert" aria-live="assertive" aria-atomic="true"
-                style="background-color: <?php echo $toastClass; ?>;">
-                <div class="d-flex">
-                    <div class="toast-body">
-                        <?php echo $message; ?>
-                    </div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                </div>
-            </div>
-        <?php endif; ?>
-        <form method="post" class="form-control mt-5 p-4"
-            style="height:auto; width:380px;
-            box-shadow: rgba(60, 64, 67, 0.3) 0px 1px 2px 0px,
-            rgba(60, 64, 67, 0.15) 0px 2px 6px 2px;">
-            <div class="row text-center">
-                <i class="fa fa-user-circle-o fa-3x mt-1 mb-2" style="color: green;"></i>
-                <h5 class="p-4" style="font-weight: 700;">Create Your Account</h5>
-            </div>
-            <div class="mb-2">
-                <label for="username"><i 
-                  class="fa fa-user"></i> User Name</label>
-                <input type="text" name="username" id="username"
-                  class="form-control" required>
-            </div>
-            <div class="mb-2 mt-2">
-                <label for="email"><i 
-                  class="fa fa-envelope"></i> Email</label>
-                                <input type="text" name="email" id="email"
-                                    class="form-control" required>
-            </div>
-            <div class="mb-2 mt-2">
-                <label for="password"><i 
-                  class="fa fa-lock"></i> Password</label>
-                                <input type="text" name="password" id="password"
-                                    class="form-control" required>
-            </div>
-            <div class="mb-2 mt-3">
-                <button type="submit" 
-                  class="btn btn-success
-                bg-success" style="font-weight: 600;">Create
-                    Account</button>
-            </div>
-            <div class="mb-2 mt-4">
-                <p class="text-center" style="font-weight: 600; 
-                color: navy;">I have an Account <a href="./login.php"
-                        style="text-decoration: none;">Login</a></p>
-            </div>
-        </form>
-    </div>
-    <script> // toasty 🍞 
-        let toastElList = [].slice.call(document.querySelectorAll('.toast'))
-        let toastList = toastElList.map(function (toastEl) {
-            return new bootstrap.Toast(toastEl, { delay: 3000 });
-        });
-        toastList.forEach(toast => toast.show());
-    </script>
-</body>
+<body>
+  <div class="bg-blobs" aria-hidden="true">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+    <div class="blob b4"></div>
+  </div>
+  <div class="noise" aria-hidden="true"></div>
 
+  <button class="theme-toggle" type="button" id="themeBtn" aria-label="Toggle theme">
+    App Appearance
+  </button>
+
+  <?php if ($message): ?>
+    <div class="toast-wrap">
+      <div class="toast align-items-center text-white <?php echo $toastClass; ?> border-0" role="alert"
+           aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+          <div class="toast-body"><?php echo $message; ?></div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"
+                  aria-label="Close"></button>
+        </div>
+      </div>
+    </div>
+  <?php endif; ?>
+
+  <div class="wrap">
+    <div class="auth-card">
+      <h3 class="title">Create Account</h3>
+      <div class="subtitle">Create your account to get started.</div>
+
+      <form method="post" class="d-grid" style="gap: 12px;">
+        <div>
+          <label for="username">Username</label>
+          <input type="text" name="username" id="username" class="form-control" required>
+        </div>
+
+        <div>
+          <label for="email">Email</label>
+          <input type="email" name="email" id="email" class="form-control" required>
+        </div>
+
+        <div>
+          <label for="password">Password</label>
+          <input type="password" name="password" id="password" class="form-control" required>
+        </div>
+
+        <div class="d-grid mt-1">
+          <button type="submit" class="btn-main">Create Account</button>
+        </div>
+
+        <div class="links">
+          Already have an account? <a href="./login.php">Login</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Toast show
+    (function () {
+      var toastElList = [].slice.call(document.querySelectorAll('.toast'));
+      var toastList = toastElList.map(function (toastEl) {
+        return new bootstrap.Toast(toastEl, { delay: 3000 });
+      });
+      toastList.forEach(t => t.show());
+    })();
+
+    // Theme: auto-detect + manual toggle + save
+    (function () {
+      const root = document.documentElement;
+      const btn = document.getElementById('themeBtn');
+
+      function applyTheme(t) {
+        root.setAttribute('data-theme', t);
+        localStorage.setItem('theme', t);
+      }
+
+      const saved = localStorage.getItem('theme');
+      if (saved) {
+        applyTheme(saved);
+      } else {
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        applyTheme(prefersDark ? 'dark' : 'light');
+      }
+
+      btn.addEventListener('click', () => {
+        const current = root.getAttribute('data-theme') || 'light';
+        applyTheme(current === 'dark' ? 'light' : 'dark');
+      });
+    })();
+  </script>
+</body>
 </html>
