@@ -125,7 +125,6 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       border-radius: 16px;
     }
 
-    /* Sticky top bar */
     .topbar {
       display: flex;
       align-items: center;
@@ -182,6 +181,12 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       -webkit-backdrop-filter: blur(10px);
     }
 
+    .hamburger-btn{
+      font-size: 18px;
+      line-height: 1;
+      padding: 10px 14px;
+    }
+
     .btn-main {
       border-radius: 12px;
       font-weight: 900;
@@ -214,7 +219,6 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
 
     .btn-main:hover, .btn-ghost:hover { filter: brightness(0.95); }
 
-    /* Dropdown fixes */
     .dropdown-menu {
       border-radius: 14px;
       border: 1px solid var(--card-border);
@@ -236,7 +240,6 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
     .dropdown-item { color: var(--text); font-weight: 700; }
     .dropdown-item:hover { background: var(--chip); }
 
-    /* Hero */
     .hero {
       margin-top: 16px;
       padding: 26px;
@@ -274,7 +277,6 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       font-size: 12px;
     }
 
-    /* ✅ Scroll-to-features arrow */
     .scroll-arrow {
       margin-top: 16px;
       display: inline-flex;
@@ -312,7 +314,6 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       50% { transform: translateY(4px); }
     }
 
-    /* Feature cards */
     .grid {
       margin-top: 14px;
       display: grid;
@@ -337,10 +338,7 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       margin-bottom: 10px;
     }
 
-    /* Fake UI preview */
-    .preview {
-      padding: 18px;
-    }
+    .preview { padding: 18px; }
 
     .fake-top {
       display: flex;
@@ -393,7 +391,7 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
     .section {
       margin-top: 14px;
       padding: 18px;
-      scroll-margin-top: 96px; /* ✅ so anchor lands nicely below sticky bar */
+      scroll-margin-top: 96px;
     }
 
     .section h3 {
@@ -451,7 +449,7 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
 
   <div class="page">
 
-    <!-- Topbar (ONLY: Settings + Login + Create Account) -->
+    <!-- Topbar -->
     <div class="glass topbar">
       <div class="brand">
         <img src="../logo.png" alt="Logo">
@@ -463,27 +461,43 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
 
       <div class="right-actions">
 
-        <!-- Settings (unchanged) -->
-        <div class="dropdown">
-          <button class="icon-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Settings">
-            ⚙
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:240px;">
-            <li class="px-2 py-2" style="font-weight:900;">Settings</li>
-            <li><hr class="dropdown-divider my-1"></li>
-            <li class="px-2 py-2 d-flex align-items-center justify-content-between">
-              <span style="font-weight:900;">App Appearance</span>
-              <button class="btn btn-sm btn-main" type="button" id="themeBtn">Toggle</button>
-            </li>
-            <li class="px-2 pb-2 muted" style="font-size:12px; font-weight:800;">
-              Light / Dark saved automatically.
-            </li>
-          </ul>
-        </div>
+        <?php if (!$isLoggedIn): ?>
+          <!-- NOT LOGGED IN: show login + create -->
+          <a class="btn-ghost" href="login.php">Login</a>
+          <a class="btn-main" href="register.php">Create Account</a>
 
-        <!-- ✅ CHANGED: Always show Login + Create Account -->
-        <a class="btn-ghost" href="login.php">Login</a>
-        <a class="btn-main" href="register.php">Create Account</a>
+        <?php else: ?>
+          <!-- LOGGED IN: show settings + 3-bar menu -->
+          <div class="dropdown">
+            <button class="icon-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Settings">
+              ⚙
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:240px;">
+              <li class="px-2 py-2" style="font-weight:900;">Settings</li>
+              <li><hr class="dropdown-divider my-1"></li>
+              <li class="px-2 py-2 d-flex align-items-center justify-content-between">
+                <span style="font-weight:900;">App Appearance</span>
+                <button class="btn btn-sm btn-main" type="button" id="themeBtn">Toggle</button>
+              </li>
+              <li>
+                <a class="dropdown-item" href="reset_password.php">Change Password</a>
+              </li>
+            </ul>
+          </div>
+
+          <div class="dropdown">
+            <button class="icon-btn dropdown-toggle hamburger-btn" data-bs-toggle="dropdown" aria-expanded="false" title="Menu">
+              &#9776;
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="homepage.php">Home</a></li>
+              <li><a class="dropdown-item" href="../tasks/index.php">Dashboard</a></li>
+              <li><a class="dropdown-item" href="../tasks/index.php#tasks">Tasks</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="logout.php">Log out</a></li>
+            </ul>
+          </div>
+        <?php endif; ?>
 
       </div>
     </div>
@@ -498,16 +512,19 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       </p>
 
       <div class="hero-cta">
-        <!-- ✅ CHANGED: Always show Login + Create Account options -->
-        <a class="btn-main" href="register.php">Create a free account</a>
-        <a class="btn-ghost" href="login.php">I already have an account</a>
+        <?php if (!$isLoggedIn): ?>
+          <a class="btn-main" href="register.php">Create a free account</a>
+          <a class="btn-ghost" href="login.php">I already have an account</a>
+        <?php else: ?>
+          <a class="btn-main" href="../tasks/index.php">Open my task dashboard</a>
+          <a class="btn-ghost" href="reset_password.php">Change password</a>
+        <?php endif; ?>
       </div>
 
       <div class="hero-note">
         ✅ Add • ✅ Edit • ✅ Delete • ✅ Track progress — all in one simple dashboard.
       </div>
 
-      <!-- ✅ Scroll to features arrow -->
       <a class="scroll-arrow" href="#features" id="scrollToFeatures">
         <span class="scroll-bubble">↓</span>
         Scroll to features
@@ -516,7 +533,6 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
 
     <!-- Main grid: preview + highlights -->
     <div class="grid" id="preview">
-      <!-- Preview card -->
       <div class="glass preview">
         <div class="fake-top">
           <div style="font-weight:950; letter-spacing:-0.02em;">App Preview</div>
@@ -566,7 +582,6 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
         </div>
       </div>
 
-      <!-- Highlights card -->
       <div class="glass card-pad">
         <div class="kicker">✨ What you get</div>
         <h3 style="font-weight:950; letter-spacing:-0.02em; margin:0 0 10px;">Everything you need to stay on top.</h3>
@@ -591,7 +606,6 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       </div>
     </div>
 
-    <!-- Features -->
     <div class="glass section" id="features">
       <h3>Features made for students</h3>
       <div class="features">
@@ -610,7 +624,6 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       </div>
     </div>
 
-    <!-- How it helps -->
     <div class="glass section" id="how">
       <h3>How it helps</h3>
       <div class="features">
@@ -629,13 +642,18 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       </div>
     </div>
 
-    <!-- Footer -->
     <div class="glass footer">
       <div>© <?php echo date('Y'); ?> Student Task Tracker</div>
       <div class="d-flex gap-3 flex-wrap">
-        <a href="login.php" style="color:var(--link); text-decoration:none;">Login</a>
-        <a href="register.php" style="color:var(--link); text-decoration:none;">Create Account</a>
-        <a href="reset_password.php" style="color:var(--link); text-decoration:none;">Reset Password</a>
+        <?php if (!$isLoggedIn): ?>
+          <a href="login.php" style="color:var(--link); text-decoration:none;">Login</a>
+          <a href="register.php" style="color:var(--link); text-decoration:none;">Create Account</a>
+          <a href="reset_password.php" style="color:var(--link); text-decoration:none;">Reset Password</a>
+        <?php else: ?>
+          <a href="../tasks/index.php" style="color:var(--link); text-decoration:none;">Open App</a>
+          <a href="reset_password.php" style="color:var(--link); text-decoration:none;">Change Password</a>
+          <a href="logout.php" style="color:var(--link); text-decoration:none;">Log out</a>
+        <?php endif; ?>
       </div>
     </div>
 
@@ -673,7 +691,7 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       });
     });
 
-    // Optional: make arrow scroll offset nicely below sticky topbar
+    // Smooth scroll offset for sticky bar
     document.getElementById('scrollToFeatures')?.addEventListener('click', function (e) {
       const target = document.getElementById('features');
       if (!target) return;
