@@ -64,6 +64,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $title = trim($_POST['title'] ?? '');
         $description = trim($_POST['description'] ?? '');
         $due_date = $_POST['due_date'] ?? null;
+
+        // ✅ NEW: if user leaves date blank, store NULL
+        if ($due_date === '' || $due_date === null) $due_date = null;
+
         $status = $_POST['status'] ?? 'Not Started';
         $priority = $_POST['priority'] ?? 'Medium';
 
@@ -90,6 +94,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $title = trim($_POST['title'] ?? '');
         $description = trim($_POST['description'] ?? '');
         $due_date = $_POST['due_date'] ?? null;
+
+        // ✅ NEW: if user clears date, store NULL
+        if ($due_date === '' || $due_date === null) $due_date = null;
+
         $status = $_POST['status'] ?? 'Not Started';
         $priority = $_POST['priority'] ?? 'Medium';
 
@@ -187,6 +195,50 @@ $conn->close();
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <style>
+  /* ✅ Homepage-style settings dropdown */
+.settings-menu{
+  min-width: 270px;
+  border-radius: 16px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.settings-title{
+  padding: 14px 14px 10px;
+  font-weight: 1000;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  text-transform: uppercase;
+}
+
+.settings-divider{
+  height: 1px;
+  background: var(--card-border);
+  margin: 0;
+}
+
+.settings-row{
+  padding: 12px 14px 14px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+}
+
+.settings-label{
+  font-weight: 1000;
+  font-size: 14px;
+  letter-spacing: 0.05em;
+  color: var(--text);
+  text-transform: uppercase;
+}
+
   :root{
     --card-bg: rgba(255,255,255,0.78);
     --card-border: rgba(255,255,255,0.55);
@@ -447,24 +499,27 @@ $conn->close();
       </div>
 
       <div class="right-actions">
-        <div class="dropdown">
-          <button class="icon-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Settings">⚙</button>
-          <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:240px;">
-            <li class="px-2 py-2" style="font-weight:900;">Settings</li>
-            <li><hr class="dropdown-divider my-1"></li>
-            <li class="px-2 py-2 d-flex align-items-center justify-content-between">
-              <span style="font-weight:800;">App Appearance</span>
-              <button class="btn btn-sm btn-main" type="button" id="themeBtn">Toggle</button>
-            </li>
-            <li><a class="dropdown-item" href="../pages/reset_password.php">Change Password</a></li>
-          </ul>
-        </div>
+    <div class="dropdown">
+  <button class="icon-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Settings">⚙</button>
+
+  <ul class="dropdown-menu dropdown-menu-end p-0 settings-menu">
+    <li class="settings-title">Settings</li>
+    <li><div class="settings-divider"></div></li>
+
+    <li class="settings-row">
+      <span class="settings-label">App Appearance</span>
+      <button class="btn btn-sm btn-main" type="button" id="themeBtn">Toggle</button>
+    </li>
+  </ul>
+</div>
+
 
         <div class="dropdown">
           <button class="icon-btn dropdown-toggle hamburger-btn" data-bs-toggle="dropdown" aria-expanded="false" title="Menu">&#9776;</button>
           <ul class="dropdown-menu dropdown-menu-end">
             <li><a class="dropdown-item" href="../pages/homepage.php">Home</a></li>
-            <li><a class="dropdown-item" href="index.php">Dashboard</a></li>
+             <li><a class="dropdown-item" href="../pages/profile.php">Profile</a></li>
+            <li><a class="dropdown-item" href="calendar.php">Calendar</a></li>
             <li><a class="dropdown-item" href="#tasks">Tasks</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="../pages/logout.php">Log out</a></li>
@@ -598,7 +653,7 @@ $conn->close();
             </div>
 
             <div class="filter-right">
-              <!-- ✅ NEW: SORT DROPDOWN -->
+              <!-- ✅ SORT DROPDOWN -->
               <select class="mini" id="sortBy" title="Sort">
                 <option value="due_asc">Sort: Due date (soonest)</option>
                 <option value="due_desc">Sort: Due date (latest)</option>
@@ -638,7 +693,8 @@ $conn->close();
 
                 <?php foreach ($tasks as $t): ?>
                   <?php
-                    $dueLabel = "—";
+                    // ✅ NEW: show "No due date" when due_date is empty
+                    $dueLabel = "No due date";
                     $isOverdue = false;
                     $isToday = false;
                     $isSoon = false;
@@ -887,9 +943,7 @@ $conn->close();
     const STATUS_MAP = { "Not Started": 1, "In Progress": 2, "Done": 3 };
 
     function parseDateYMD(s) {
-      // returns ms timestamp; if blank/null returns null
       if (!s) return null;
-      // safe parse for yyyy-mm-dd
       const parts = s.split("-");
       if (parts.length !== 3) return null;
       const y = Number(parts[0]), m = Number(parts[1]) - 1, d = Number(parts[2]);
@@ -899,7 +953,6 @@ $conn->close();
 
     function parseDateTime(s) {
       if (!s) return null;
-      // "YYYY-MM-DD HH:MM:SS" is parseable by Date in many cases, but be safe:
       const iso = s.replace(" ", "T") + "Z";
       const dt = new Date(iso);
       return isNaN(dt.getTime()) ? null : dt.getTime();
@@ -908,7 +961,7 @@ $conn->close();
     function sortRows() {
       const mode = sortBy?.value || "due_asc";
       const rows = Array.from(body.querySelectorAll('tr'))
-        .filter(r => !(r.querySelector('td')?.getAttribute('colspan'))); // ignore "no tasks" row
+        .filter(r => !(r.querySelector('td')?.getAttribute('colspan')));
 
       const getDue = (r) => parseDateYMD(r.getAttribute('data-due')) ?? null;
       const getCreated = (r) => parseDateTime(r.getAttribute('data-created')) ?? null;
@@ -916,7 +969,6 @@ $conn->close();
       const getStatus = (r) => STATUS_MAP[r.getAttribute('data-status')] ?? 99;
       const getTitle = (r) => (r.getAttribute('data-title') || '').trim();
 
-      // stable tie breaker (original order) using current DOM index
       const idxMap = new Map(rows.map((r, i) => [r, i]));
 
       rows.sort((a, b) => {
@@ -927,7 +979,6 @@ $conn->close();
           const da = getDue(a);
           const db = getDue(b);
 
-          // nulls last for asc, first for desc
           if (da === null && db === null) return ia - ib;
           if (da === null) return mode === "due_asc" ? 1 : -1;
           if (db === null) return mode === "due_asc" ? -1 : 1;
@@ -959,7 +1010,6 @@ $conn->close();
           const ca = getCreated(a);
           const cb = getCreated(b);
 
-          // nulls last for created desc/asc
           if (ca === null && cb === null) return ia - ib;
           if (ca === null) return 1;
           if (cb === null) return -1;
@@ -971,7 +1021,6 @@ $conn->close();
         return ia - ib;
       });
 
-      // Re-append in new order
       rows.forEach(r => body.appendChild(r));
     }
 
@@ -984,7 +1033,6 @@ $conn->close();
       const todayOnly = !!fToday?.checked;
       const soonOnly = !!fSoon?.checked;
 
-      // mutually exclusive toggles
       if (todayOnly) { if (fOverdue) fOverdue.checked = false; if (fSoon) fSoon.checked = false; }
       if (odOnly)    { if (fToday) fToday.checked = false; if (fSoon) fSoon.checked = false; }
       if (soonOnly)  { if (fToday) fToday.checked = false; if (fOverdue) fOverdue.checked = false; }
@@ -1019,7 +1067,6 @@ $conn->close();
 
       if (visibleCount) visibleCount.textContent = shown ? `${shown} showing` : `0 showing`;
 
-      // IMPORTANT: after filtering, sort the table
       sortRows();
     }
 
@@ -1029,7 +1076,6 @@ $conn->close();
       el.addEventListener('change', applyFilters);
     });
 
-    // default
     applyFilters();
   })();
 </script>

@@ -108,6 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $toast = "bg-danger";
         }
         $upd->close();
+        
       }
     }
   }
@@ -154,6 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
     }
   }
+
 
   // ✅ Delete account (requires password)
   if ($action === 'delete_account') {
@@ -289,7 +291,8 @@ $conn->close();
         <div class="muted" style="font-weight:900;">@<?php echo clean($username); ?> • <?php echo clean($email); ?></div>
         <div class="mt-2">
           <a class="btn btn-sm btn-main" href="homepage.php" style="border-radius:12px; font-weight:900;">Back to Home</a>
-          <a class="btn btn-sm btn-main" href="../tasks/index.php" style="border-radius:12px; font-weight:900;">Open Dashboard</a>
+          <a class="btn btn-sm btn-main" href="../tasks/index.php" style="border-radius:12px; font-weight:900;">Open Tasks</a>
+          <a class="btn btn-sm btn-main" href="../tasks/calendar.php" style="border-radius:12px; font-weight:900;">Open Calendar</a>
         </div>
       </div>
     </div>
@@ -298,6 +301,10 @@ $conn->close();
 
     <!-- Update Profile -->
     <h5 style="font-weight:950;">Edit profile</h5>
+    <a class="btn btn-dark" href="reset_password.php" style="border-radius:12px; font-weight:900;">
+  Change Password
+</a>
+
     <form method="post" class="d-grid" style="gap:12px; max-width:520px;">
       <input type="hidden" name="csrf" value="<?php echo clean($csrf); ?>">
       <input type="hidden" name="action" value="update_profile">

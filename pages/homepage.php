@@ -7,18 +7,11 @@ $email = $isLoggedIn ? $_SESSION['email'] : '';
 
 function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
 
-// ✅ CSRF token (for upload form)
+// ✅ CSRF token (still fine to keep, even if not used on homepage now)
 if (empty($_SESSION['csrf'])) {
   $_SESSION['csrf'] = bin2hex(random_bytes(16));
 }
 $csrf = $_SESSION['csrf'];
-
-function require_csrf() {
-  if (!isset($_POST['csrf']) || !hash_equals($_SESSION['csrf'], $_POST['csrf'])) {
-    http_response_code(403);
-    die("Invalid CSRF token");
-  }
-}
 
 // ✅ Toast messaging
 $message = "";
@@ -27,89 +20,13 @@ $toastClass = "";
 // ✅ Profile fields
 $profileUsername = "";
 $profileName = "";
-$profilePhoto = "";   // ✅ uses userdata.profile_photo (same as profile.php)
+$profilePhoto = "";   // userdata.profile_photo
 $initials = "U";
-
-// ✅ Handle profile picture upload (SAVES INTO profile_photo)
-if ($isLoggedIn && $_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'upload_pic') {
-  require_csrf();
-  include __DIR__ . '/../database/db_connect.php';
-
-  if (!isset($_FILES['profile_pic']) || $_FILES['profile_pic']['error'] !== UPLOAD_ERR_OK) {
-    $message = "Please choose an image to upload.";
-    $toastClass = "bg-warning";
-  } else {
-    $file = $_FILES['profile_pic'];
-
-    // Basic validation
-    if ($file['size'] > 2 * 1024 * 1024) { // 2MB
-      $message = "Image too large (max 2MB).";
-      $toastClass = "bg-warning";
-    } else {
-      $finfo = new finfo(FILEINFO_MIME_TYPE);
-      $mime = $finfo->file($file['tmp_name']);
-
-      $allowed = [
-        'image/jpeg' => 'jpg',
-        'image/png'  => 'png',
-        'image/webp' => 'webp'
-      ];
-
-      if (!isset($allowed[$mime])) {
-        $message = "Only JPG, PNG, or WEBP images are allowed.";
-        $toastClass = "bg-warning";
-      } else {
-        // ✅ Use the SAME folder as profile.php to avoid confusion
-        $uploadDir = __DIR__ . '/../uploads/profile_photos';
-        if (!is_dir($uploadDir)) {
-          @mkdir($uploadDir, 0755, true);
-        }
-
-        // Create safe unique filename
-        $ext = $allowed[$mime];
-        $safeName = bin2hex(random_bytes(16)) . "." . $ext;
-
-        // Absolute path to save on server
-        $destAbs = $uploadDir . '/' . $safeName;
-
-        // ✅ DB path format to match profile.php: "../uploads/profile_photos/filename"
-        $destRel = '../uploads/profile_photos/' . $safeName;
-
-        if (!move_uploaded_file($file['tmp_name'], $destAbs)) {
-          $message = "Upload failed. Check folder permissions.";
-          $toastClass = "bg-danger";
-        } else {
-          // ✅ Save to DB (profile_photo column)
-          try {
-            $stmt = $conn->prepare("UPDATE userdata SET profile_photo=? WHERE email=? LIMIT 1");
-            $stmt->bind_param("ss", $destRel, $email);
-
-            if ($stmt->execute()) {
-              $message = "Profile picture updated!";
-              $toastClass = "bg-success";
-            } else {
-              $message = "Could not save image path to database.";
-              $toastClass = "bg-danger";
-            }
-
-            $stmt->close();
-          } catch (Throwable $e) {
-            $message = "Database column 'profile_photo' is missing. Add it in phpMyAdmin.";
-            $toastClass = "bg-warning";
-          }
-        }
-      }
-    }
-  }
-
-  $conn->close();
-}
 
 // ✅ Fetch profile fields for display
 if ($isLoggedIn) {
   include __DIR__ . '/../database/db_connect.php';
 
-  // ✅ Read username + display_name + profile_photo
   $stmt = $conn->prepare("SELECT username, display_name, profile_photo FROM userdata WHERE email=? LIMIT 1");
   $stmt->bind_param("s", $email);
   $stmt->execute();
@@ -410,6 +327,50 @@ if ($isLoggedIn && !empty($profilePhoto)) {
     .dropdown-item { color: var(--text); font-weight: 700; }
     .dropdown-item:hover { background: var(--chip); }
 
+    /* ✅ NEW: Settings dropdown - toggle only + more visible headings (calendar style) */
+    .settings-menu{
+      min-width: 270px;
+      border-radius: 16px;
+      border: 1px solid var(--card-border);
+      background: var(--card-bg);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      overflow: hidden;
+      padding: 0 !important;
+    }
+
+    .settings-title{
+      padding: 14px 14px 10px;
+      font-weight: 1000;
+      font-size: 16px;
+      letter-spacing: 0.06em;
+      color: var(--text);
+      text-transform: uppercase;
+    }
+
+    .settings-divider{
+      height: 1px;
+      background: var(--card-border);
+      margin: 0;
+    }
+
+    .settings-row{
+      padding: 12px 14px 14px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+    }
+
+    .settings-label{
+      font-weight: 1000;
+      font-size: 14px;
+      letter-spacing: 0.05em;
+      color: var(--text);
+      text-transform: uppercase;
+    }
+
     .toast-wrap{
       position: fixed;
       top: 18px;
@@ -510,47 +471,15 @@ if ($isLoggedIn && !empty($profilePhoto)) {
           <a class="btn-main" href="register.php">Create Account</a>
         <?php else: ?>
 
-          <!-- Settings dropdown -->
+          <!-- ✅ Settings dropdown (calendar style: toggle only + stronger headings) -->
           <div class="dropdown">
-            <button class="icon-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Settings">
-              ⚙
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:320px;">
-              <li class="px-2 py-2" style="font-weight:900;">Settings</li>
-              <li><hr class="dropdown-divider my-1"></li>
-
-              <li class="px-2 py-2 d-flex align-items-center justify-content-between">
-                <span style="font-weight:900;">App Appearance</span>
+            <button class="icon-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Settings">⚙</button>
+            <ul class="dropdown-menu dropdown-menu-end settings-menu">
+              <li class="settings-title">Settings</li>
+              <li><div class="settings-divider"></div></li>
+              <li class="settings-row">
+                <span class="settings-label">App Appearance</span>
                 <button class="btn btn-sm btn-main" type="button" id="themeBtn">Toggle</button>
-              </li>
-
-              <li><a class="dropdown-item" href="reset_password.php">Change Password</a></li>
-
-              <li><hr class="dropdown-divider my-1"></li>
-
-              <!-- ✅ Upload profile picture + show path -->
-              <li class="px-2 py-2" style="font-weight:900;">Profile picture</li>
-
-              <li class="px-2 pb-2">
-                <div class="muted" style="font-weight:800; font-size:12px; margin-bottom:8px;">
-                  Saved path:
-                  <span style="font-weight:900;">
-                    <?php echo $profilePhoto ? clean($profilePhoto) : "None yet"; ?>
-                  </span>
-                </div>
-
-                <form method="post" enctype="multipart/form-data" class="d-grid" style="gap:10px;">
-                  <input type="hidden" name="csrf" value="<?php echo clean($csrf); ?>">
-                  <input type="hidden" name="action" value="upload_pic">
-
-                  <input class="form-control" type="file" name="profile_pic" accept="image/png,image/jpeg,image/webp" required>
-
-                  <button class="btn-main" type="submit">Upload picture</button>
-
-                  <div class="muted" style="font-weight:800; font-size:12px;">
-                    JPG / PNG / WEBP • Max 2MB
-                  </div>
-                </form>
               </li>
             </ul>
           </div>
@@ -563,7 +492,7 @@ if ($isLoggedIn && !empty($profilePhoto)) {
             <ul class="dropdown-menu dropdown-menu-end">
               <li><a class="dropdown-item" href="homepage.php">Home</a></li>
               <li><a class="dropdown-item" href="profile.php">Profile</a></li>
-              <li><a class="dropdown-item" href="../tasks/index.php">Dashboard</a></li>
+              <li><a class="dropdown-item" href="../tasks/calendar.php">Calendar</a></li>
               <li><a class="dropdown-item" href="../tasks/index.php#tasks">Tasks</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="logout.php">Log out</a></li>
@@ -573,8 +502,6 @@ if ($isLoggedIn && !empty($profilePhoto)) {
         <?php endif; ?>
       </div>
     </div>
-
-    <!-- (rest of your page stays exactly the same) -->
 
     <!-- Hero -->
     <div class="glass hero">
@@ -604,8 +531,6 @@ if ($isLoggedIn && !empty($profilePhoto)) {
         Scroll to features
       </a>
     </div>
-
-    <!-- (everything below unchanged) -->
 
     <!-- Main grid: preview + highlights -->
     <div class="grid" id="preview">
