@@ -23,6 +23,20 @@ $profileName = "";
 $profilePhoto = "";   // userdata.profile_photo
 $initials = "U";
 
+// ✅ Dashboard data (logged-in only)
+$dash = [
+  'overdue' => 0,
+  'due_today' => 0,
+  'due_soon' => 0,
+  'no_due' => 0,
+  'total_open' => 0
+];
+$upcomingTasks = [];      // next 7 days tasks (not done)
+$next7Counts = [];        // yyyy-mm-dd => count (not done)
+$today = new DateTime('today');
+$todayStr = $today->format('Y-m-d');
+$soonLimit = (clone $today)->modify('+7 days');
+
 // ✅ Fetch profile fields for display
 if ($isLoggedIn) {
   include __DIR__ . '/../database/db_connect.php';
@@ -37,8 +51,90 @@ if ($isLoggedIn) {
     $profileName = $row['display_name'] ?? "";
     $profilePhoto = $row['profile_photo'] ?? "";
   }
-
   $stmt->close();
+
+  // ✅ Ensure tasks table exists (safe for users who land on homepage first)
+  $conn->query("
+    CREATE TABLE IF NOT EXISTS tasks (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_email VARCHAR(255) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      description TEXT NULL,
+      due_date DATE NULL,
+      status ENUM('Not Started','In Progress','Done') NOT NULL DEFAULT 'Not Started',
+      priority ENUM('Low','Medium','High') NOT NULL DEFAULT 'Medium',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+      INDEX(user_email),
+      INDEX(due_date),
+      INDEX(status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  ");
+
+  // ✅ Dashboard stats (overdue / today / soon / no due / total open)
+  $statsSql = "
+    SELECT
+      SUM(status <> 'Done' AND due_date IS NOT NULL AND due_date < CURDATE()) AS overdue,
+      SUM(status <> 'Done' AND due_date = CURDATE()) AS due_today,
+      SUM(status <> 'Done' AND due_date > CURDATE() AND due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)) AS due_soon,
+      SUM(due_date IS NULL OR due_date = '') AS no_due,
+      SUM(status <> 'Done') AS total_open
+    FROM tasks
+    WHERE user_email = ?
+  ";
+  $stmtS = $conn->prepare($statsSql);
+  $stmtS->bind_param("s", $email);
+  $stmtS->execute();
+  $rS = $stmtS->get_result();
+  if ($row = $rS->fetch_assoc()) {
+    $dash['overdue'] = (int)($row['overdue'] ?? 0);
+    $dash['due_today'] = (int)($row['due_today'] ?? 0);
+    $dash['due_soon'] = (int)($row['due_soon'] ?? 0);
+    $dash['no_due'] = (int)($row['no_due'] ?? 0);
+    $dash['total_open'] = (int)($row['total_open'] ?? 0);
+  }
+  $stmtS->close();
+
+  // ✅ Upcoming tasks list (next 7 days, not done)
+  $stmtU = $conn->prepare("
+    SELECT id, title, description, due_date, priority, status
+    FROM tasks
+    WHERE user_email = ?
+      AND status <> 'Done'
+      AND due_date IS NOT NULL
+      AND due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+    ORDER BY due_date ASC,
+      CASE priority WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END,
+      id DESC
+    LIMIT 6
+  ");
+  $stmtU->bind_param("s", $email);
+  $stmtU->execute();
+  $rU = $stmtU->get_result();
+  while ($row = $rU->fetch_assoc()) $upcomingTasks[] = $row;
+  $stmtU->close();
+
+  // ✅ Next 7 days counts (mini calendar preview)
+  $startStr = $today->format('Y-m-d');
+  $endStr = $soonLimit->format('Y-m-d');
+  $stmtC = $conn->prepare("
+    SELECT due_date, COUNT(*) AS c
+    FROM tasks
+    WHERE user_email = ?
+      AND status <> 'Done'
+      AND due_date IS NOT NULL
+      AND due_date BETWEEN ? AND ?
+    GROUP BY due_date
+  ");
+  $stmtC->bind_param("sss", $email, $startStr, $endStr);
+  $stmtC->execute();
+  $rC = $stmtC->get_result();
+  while ($row = $rC->fetch_assoc()) {
+    $d = $row['due_date'];
+    $next7Counts[$d] = (int)$row['c'];
+  }
+  $stmtC->close();
+
   $conn->close();
 
   // initials from display_name > username > email
@@ -81,6 +177,18 @@ if ($isLoggedIn && !empty($profilePhoto)) {
     // web URL from homepage.php
     $profilePicUrl = "../" . $norm . "?v=" . filemtime($abs);
   }
+}
+
+// helpers for dashboard labels
+function prio_tag($p) {
+  if ($p === 'High') return 'High';
+  if ($p === 'Low') return 'Low';
+  return 'Medium';
+}
+function due_human($ymd) {
+  if (!$ymd) return "No due date";
+  $dt = DateTime::createFromFormat('Y-m-d', $ymd);
+  return $dt ? $dt->format('D j M') : "No due date";
 }
 ?>
 <!DOCTYPE html>
@@ -327,7 +435,7 @@ if ($isLoggedIn && !empty($profilePhoto)) {
     .dropdown-item { color: var(--text); font-weight: 700; }
     .dropdown-item:hover { background: var(--chip); }
 
-    /* ✅ NEW: Settings dropdown - toggle only + more visible headings (calendar style) */
+    /* ✅ Settings dropdown - toggle only + stronger headings */
     .settings-menu{
       min-width: 270px;
       border-radius: 16px;
@@ -410,6 +518,79 @@ if ($isLoggedIn && !empty($profilePhoto)) {
     [data-theme="dark"] .feature { background: rgba(17,24,39,0.35); }
     .feature h5 { margin: 0 0 6px; font-weight: 950; }
     .footer { margin-top: 14px; padding: 16px 18px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; color: var(--muted); font-weight: 800; font-size: 13px; }
+
+    /* ✅ NEW: logged-in dashboard widgets */
+    .stat-grid{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 900px){
+      .stat-grid{ grid-template-columns: repeat(2, 1fr); }
+    }
+    .stat-card{
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255,255,255,0.12);
+    }
+    [data-theme="dark"] .stat-card{ background: rgba(17,24,39,0.35); }
+    .stat-top{
+      display:flex; align-items:center; justify-content:space-between; gap: 10px;
+      font-weight: 950;
+      letter-spacing: -0.01em;
+    }
+    .stat-num{
+      font-size: 26px;
+      font-weight: 1000;
+      line-height: 1;
+      margin-top: 6px;
+    }
+    .stat-sub{
+      margin-top: 6px;
+      font-weight: 800;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .mini-list{
+      display:grid;
+      gap: 10px;
+    }
+    .mini-item{
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255,255,255,0.12);
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap: 10px;
+    }
+    [data-theme="dark"] .mini-item{ background: rgba(17,24,39,0.35); }
+    .mini-title{ font-weight: 950; margin: 0; letter-spacing: -0.01em; }
+    .mini-desc{ margin-top: 4px; font-weight: 800; color: var(--muted); font-size: 12px; }
+    .mini-right{ display:flex; flex-direction:column; align-items:flex-end; gap: 8px; white-space:nowrap; }
+    .pill-link{
+      display:inline-flex; align-items:center; gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      font-weight: 900;
+      background: var(--chip);
+      border: 1px solid var(--card-border);
+      text-decoration:none;
+      color: var(--text);
+    }
+    .pill-link:hover{ filter: brightness(0.95); }
+
+    .tiny{
+      font-weight: 900;
+      font-size: 12px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: var(--chip);
+      border: 1px solid var(--card-border);
+    }
   </style>
 </head>
 
@@ -471,7 +652,7 @@ if ($isLoggedIn && !empty($profilePhoto)) {
           <a class="btn-main" href="register.php">Create Account</a>
         <?php else: ?>
 
-          <!-- ✅ Settings dropdown (calendar style: toggle only + stronger headings) -->
+          <!-- ✅ Settings dropdown -->
           <div class="dropdown">
             <button class="icon-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Settings">⚙</button>
             <ul class="dropdown-menu dropdown-menu-end settings-menu">
@@ -518,7 +699,7 @@ if ($isLoggedIn && !empty($profilePhoto)) {
           <a class="btn-ghost" href="login.php">I already have an account</a>
         <?php else: ?>
           <a class="btn-main" href="../tasks/index.php">Open my task dashboard</a>
-          <a class="btn-ghost" href="profile.php">Edit my profile</a>
+          <a class="btn-ghost" href="../tasks/calendar.php">Open my calendar</a>
         <?php endif; ?>
       </div>
 
@@ -534,77 +715,208 @@ if ($isLoggedIn && !empty($profilePhoto)) {
 
     <!-- Main grid: preview + highlights -->
     <div class="grid" id="preview">
-      <div class="glass preview">
-        <div class="fake-top">
-          <div style="font-weight:950; letter-spacing:-0.02em;">App Preview</div>
-          <div class="fake-pill">Today: 3 tasks • Due soon: 1</div>
+
+      <?php if (!$isLoggedIn): ?>
+        <!-- ✅ NOT LOGGED IN VERSION (UNCHANGED) -->
+        <div class="glass preview">
+          <div class="fake-top">
+            <div style="font-weight:950; letter-spacing:-0.02em;">App Preview</div>
+            <div class="fake-pill">Today: 3 tasks • Due soon: 1</div>
+          </div>
+
+          <div class="fake-task">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <h6>English Essay — draft intro</h6>
+              <span class="tag">High</span>
+            </div>
+            <div class="muted" style="font-weight:800; font-size:13px;">
+              Write a strong opening paragraph and outline the main points.
+            </div>
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              <span class="tag">Due: Fri</span>
+              <span class="tag">Status: In Progress</span>
+            </div>
+          </div>
+
+          <div class="fake-task">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <h6>Maths Homework — Chapter 7</h6>
+              <span class="tag">Medium</span>
+            </div>
+            <div class="muted" style="font-weight:800; font-size:13px;">
+              Complete questions 1–12 and check answers.
+            </div>
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              <span class="tag">Due: Mon</span>
+              <span class="tag">Status: Not Started</span>
+            </div>
+          </div>
+
+          <div class="fake-task" style="margin-bottom:0;">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <h6>Science Revision — Photosynthesis</h6>
+              <span class="tag">Low</span>
+            </div>
+            <div class="muted" style="font-weight:800; font-size:13px;">
+              Review notes and make 10 flashcards.
+            </div>
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              <span class="tag">Due: —</span>
+              <span class="tag">Status: Done</span>
+            </div>
+          </div>
         </div>
 
-        <div class="fake-task">
-          <div class="d-flex justify-content-between align-items-start gap-2">
-            <h6>English Essay — draft intro</h6>
-            <span class="tag">High</span>
+        <div class="glass card-pad">
+          <div class="kicker">✨ What you get</div>
+          <h3 style="font-weight:950; letter-spacing:-0.02em; margin:0 0 10px;">Everything you need to stay on top.</h3>
+          <div class="muted" style="font-weight:800; margin-bottom:12px;">
+            Keep your school work organised with simple tools that actually get used.
           </div>
-          <div class="muted" style="font-weight:800; font-size:13px;">
-            Write a strong opening paragraph and outline the main points.
-          </div>
-          <div class="d-flex gap-2 mt-2 flex-wrap">
-            <span class="tag">Due: Fri</span>
-            <span class="tag">Status: In Progress</span>
+
+          <div class="d-grid" style="gap:10px;">
+            <div class="feature">
+              <h5>Task Management</h5>
+              <div class="muted" style="font-weight:800;">Add, edit, delete tasks — with due dates and priorities.</div>
+            </div>
+            <div class="feature">
+              <h5>Progress Tracking</h5>
+              <div class="muted" style="font-weight:800;">Set status: Not Started, In Progress, Done.</div>
+            </div>
+            <div class="feature">
+              <h5>Clean UI + Dark Mode</h5>
+              <div class="muted" style="font-weight:800;">Switch appearance instantly using the settings toggle.</div>
+            </div>
           </div>
         </div>
 
-        <div class="fake-task">
-          <div class="d-flex justify-content-between align-items-start gap-2">
-            <h6>Maths Homework — Chapter 7</h6>
-            <span class="tag">Medium</span>
+      <?php else: ?>
+        <!-- ✅ LOGGED IN VERSION (REAL DATA DASHBOARD) -->
+
+        <div class="glass preview">
+          <div class="fake-top">
+            <div style="font-weight:950; letter-spacing:-0.02em;">Your week overview</div>
+            <div class="fake-pill">Open tasks: <?php echo (int)$dash['total_open']; ?></div>
           </div>
-          <div class="muted" style="font-weight:800; font-size:13px;">
-            Complete questions 1–12 and check answers.
+
+          <!-- Stats -->
+          <div class="stat-grid">
+            <a class="stat-card" href="../tasks/index.php#tasks" style="text-decoration:none; color:inherit;">
+              <div class="stat-top">
+                <span>Overdue</span>
+                <span class="tiny">⚠</span>
+              </div>
+              <div class="stat-num"><?php echo (int)$dash['overdue']; ?></div>
+              <div class="stat-sub">Tasks past the due date</div>
+            </a>
+
+            <a class="stat-card" href="../tasks/index.php#tasks" style="text-decoration:none; color:inherit;">
+              <div class="stat-top">
+                <span>Due today</span>
+                <span class="tiny">📌</span>
+              </div>
+              <div class="stat-num"><?php echo (int)$dash['due_today']; ?></div>
+              <div class="stat-sub"><?php echo clean($today->format('D j M')); ?></div>
+            </a>
+
+            <a class="stat-card" href="../tasks/calendar.php" style="text-decoration:none; color:inherit;">
+              <div class="stat-top">
+                <span>Next 7 days</span>
+                <span class="tiny">📅</span>
+              </div>
+              <div class="stat-num"><?php echo (int)$dash['due_soon']; ?></div>
+              <div class="stat-sub">Coming up soon</div>
+            </a>
+
+            <a class="stat-card" href="../tasks/index.php#tasks" style="text-decoration:none; color:inherit;">
+              <div class="stat-top">
+                <span>No due date</span>
+                <span class="tiny">—</span>
+              </div>
+              <div class="stat-num"><?php echo (int)$dash['no_due']; ?></div>
+              <div class="stat-sub">Set dates when you can</div>
+            </a>
           </div>
-          <div class="d-flex gap-2 mt-2 flex-wrap">
-            <span class="tag">Due: Mon</span>
-            <span class="tag">Status: Not Started</span>
+
+          <!-- Upcoming list -->
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <div style="font-weight:950; letter-spacing:-0.01em;">Upcoming tasks</div>
+            <a class="pill-link" href="../tasks/index.php">Open tasks →</a>
           </div>
+
+          <?php if (count($upcomingTasks) === 0): ?>
+            <div class="muted" style="font-weight:800;">
+              Nothing due in the next 7 days 🎯
+            </div>
+          <?php else: ?>
+            <div class="mini-list">
+              <?php foreach ($upcomingTasks as $t): ?>
+                <?php
+                  $p = $t['priority'] ?? 'Medium';
+                  $d = $t['due_date'] ?? '';
+                  $dueText = ($d === $todayStr) ? "Today" : due_human($d);
+                ?>
+                <div class="mini-item">
+                  <div style="min-width:0;">
+                    <div class="mini-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                      <?php echo clean($t['title']); ?>
+                    </div>
+                    <?php if (!empty($t['description'])): ?>
+                      <div class="mini-desc" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        <?php echo clean($t['description']); ?>
+                      </div>
+                    <?php endif; ?>
+                  </div>
+                  <div class="mini-right">
+                    <span class="tiny"><?php echo clean($dueText); ?></span>
+                    <span class="tiny"><?php echo clean(prio_tag($p)); ?></span>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
         </div>
 
-        <div class="fake-task" style="margin-bottom:0;">
-          <div class="d-flex justify-content-between align-items-start gap-2">
-            <h6>Science Revision — Photosynthesis</h6>
-            <span class="tag">Low</span>
+        <div class="glass card-pad">
+          <div class="kicker">🚀 Quick access</div>
+          <h3 style="font-weight:950; letter-spacing:-0.02em; margin:0 0 10px;">Jump back in.</h3>
+          <div class="muted" style="font-weight:800; margin-bottom:12px;">
+            Open your tasks and calendar instantly, and see what’s coming up this week.
           </div>
-          <div class="muted" style="font-weight:800; font-size:13px;">
-            Review notes and make 10 flashcards.
-          </div>
-          <div class="d-flex gap-2 mt-2 flex-wrap">
-            <span class="tag">Due: —</span>
-            <span class="tag">Status: Done</span>
-          </div>
-        </div>
-      </div>
 
-      <div class="glass card-pad">
-        <div class="kicker">✨ What you get</div>
-        <h3 style="font-weight:950; letter-spacing:-0.02em; margin:0 0 10px;">Everything you need to stay on top.</h3>
-        <div class="muted" style="font-weight:800; margin-bottom:12px;">
-          Keep your school work organised with simple tools that actually get used.
-        </div>
+          <div class="d-grid" style="gap:10px; margin-bottom: 12px;">
+            <a class="btn-main" href="../tasks/index.php">Open Tasks</a>
+            <a class="btn-ghost" href="../tasks/calendar.php">Open Calendar</a>
+          </div>
 
-        <div class="d-grid" style="gap:10px;">
           <div class="feature">
-            <h5>Task Management</h5>
-            <div class="muted" style="font-weight:800;">Add, edit, delete tasks — with due dates and priorities.</div>
-          </div>
-          <div class="feature">
-            <h5>Progress Tracking</h5>
-            <div class="muted" style="font-weight:800;">Set status: Not Started, In Progress, Done.</div>
-          </div>
-          <div class="feature">
-            <h5>Clean UI + Dark Mode</h5>
-            <div class="muted" style="font-weight:800;">Switch appearance instantly using the settings toggle.</div>
+            <h5 style="margin:0 0 6px; font-weight:950;">Mini calendar (next 7 days)</h5>
+            <div class="muted" style="font-weight:800; margin-bottom:10px;">
+              Counts show open tasks due on each day.
+            </div>
+
+            <div class="d-grid" style="gap:10px;">
+              <?php
+                $cursor = new DateTime('today');
+                for ($i = 0; $i < 7; $i++) {
+                  $d = $cursor->format('Y-m-d');
+                  $count = $next7Counts[$d] ?? 0;
+                  $label = ($d === $todayStr) ? "Today" : $cursor->format('D j M');
+                  $monthLink = "../tasks/calendar.php?y=" . $cursor->format('Y') . "&m=" . $cursor->format('n');
+
+                  echo '<a class="pill-link" href="' . clean($monthLink) . '" style="justify-content:space-between;">';
+                  echo '  <span style="font-weight:950;">' . clean($label) . '</span>';
+                  echo '  <span class="tiny">' . (int)$count . '</span>';
+                  echo '</a>';
+
+                  $cursor->modify('+1 day');
+                }
+              ?>
+            </div>
           </div>
         </div>
-      </div>
+
+      <?php endif; ?>
     </div>
 
     <div class="glass section" id="features">
