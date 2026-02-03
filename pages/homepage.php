@@ -27,10 +27,10 @@ $toastClass = "";
 // ✅ Profile fields
 $profileUsername = "";
 $profileName = "";
-$profilePic = "";      // stores relative path like "uploads/profile_pics/xyz.jpg"
+$profilePhoto = "";   // ✅ uses userdata.profile_photo (same as profile.php)
 $initials = "U";
 
-// ✅ Handle profile picture upload
+// ✅ Handle profile picture upload (SAVES INTO profile_photo)
 if ($isLoggedIn && $_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'upload_pic') {
   require_csrf();
   include __DIR__ . '/../database/db_connect.php';
@@ -59,8 +59,8 @@ if ($isLoggedIn && $_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ??
         $message = "Only JPG, PNG, or WEBP images are allowed.";
         $toastClass = "bg-warning";
       } else {
-        // Ensure upload directory exists
-        $uploadDir = __DIR__ . '/../uploads/profile_pics';
+        // ✅ Use the SAME folder as profile.php to avoid confusion
+        $uploadDir = __DIR__ . '/../uploads/profile_photos';
         if (!is_dir($uploadDir)) {
           @mkdir($uploadDir, 0755, true);
         }
@@ -72,16 +72,16 @@ if ($isLoggedIn && $_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ??
         // Absolute path to save on server
         $destAbs = $uploadDir . '/' . $safeName;
 
-        // Relative path to store in DB (used in <img src="...">)
-        $destRel = 'uploads/profile_pics/' . $safeName;
+        // ✅ DB path format to match profile.php: "../uploads/profile_photos/filename"
+        $destRel = '../uploads/profile_photos/' . $safeName;
 
         if (!move_uploaded_file($file['tmp_name'], $destAbs)) {
           $message = "Upload failed. Check folder permissions.";
           $toastClass = "bg-danger";
         } else {
-          // Save to DB (profile_pic column)
+          // ✅ Save to DB (profile_photo column)
           try {
-            $stmt = $conn->prepare("UPDATE userdata SET profile_pic=? WHERE email=? LIMIT 1");
+            $stmt = $conn->prepare("UPDATE userdata SET profile_photo=? WHERE email=? LIMIT 1");
             $stmt->bind_param("ss", $destRel, $email);
 
             if ($stmt->execute()) {
@@ -94,7 +94,7 @@ if ($isLoggedIn && $_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ??
 
             $stmt->close();
           } catch (Throwable $e) {
-            $message = "Database column 'profile_pic' is missing. Run the SQL (Option A) to add it.";
+            $message = "Database column 'profile_photo' is missing. Add it in phpMyAdmin.";
             $toastClass = "bg-warning";
           }
         }
@@ -109,18 +109,8 @@ if ($isLoggedIn && $_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ??
 if ($isLoggedIn) {
   include __DIR__ . '/../database/db_connect.php';
 
-  // Try to read username + display_name + profile_pic safely
-  try {
-    $stmt = $conn->prepare("SELECT username, display_name, profile_pic FROM userdata WHERE email=? LIMIT 1");
-  } catch (Throwable $e) {
-    // fallback if columns don't exist yet
-    try {
-      $stmt = $conn->prepare("SELECT username, display_name FROM userdata WHERE email=? LIMIT 1");
-    } catch (Throwable $e2) {
-      $stmt = $conn->prepare("SELECT username FROM userdata WHERE email=? LIMIT 1");
-    }
-  }
-
+  // ✅ Read username + display_name + profile_photo
+  $stmt = $conn->prepare("SELECT username, display_name, profile_photo FROM userdata WHERE email=? LIMIT 1");
   $stmt->bind_param("s", $email);
   $stmt->execute();
   $res = $stmt->get_result();
@@ -128,7 +118,7 @@ if ($isLoggedIn) {
   if ($row = $res->fetch_assoc()) {
     $profileUsername = $row['username'] ?? "";
     $profileName = $row['display_name'] ?? "";
-    $profilePic = $row['profile_pic'] ?? "";
+    $profilePhoto = $row['profile_photo'] ?? "";
   }
 
   $stmt->close();
@@ -147,19 +137,32 @@ if ($isLoggedIn) {
   if ($initials === "") $initials = "U";
 }
 
-// ✅ Build profile image URL if saved
+/**
+ * ✅ Build profile image URL robustly
+ * DB stores like: "../uploads/profile_photos/xxx.jpg"
+ * homepage.php is /pages, so we need to convert that to a working URL.
+ */
 $profilePicUrl = "";
-if ($isLoggedIn && !empty($profilePic)) {
-  // homepage.php is inside /pages, so "../" gets you back to project root
-  $profilePicUrl = "../" . ltrim($profilePic, "/");
-}
-
-// ✅ Extra safety: only show <img> if the file exists on disk
 $profilePicExists = false;
-if ($isLoggedIn && !empty($profilePic)) {
-  $abs = __DIR__ . '/../' . ltrim($profilePic, '/');
+
+if ($isLoggedIn && !empty($profilePhoto)) {
+
+  $norm = trim($profilePhoto);
+
+  // remove leading ../ (one or many)
+  $norm = preg_replace('#^(\.\./)+#', '', $norm);
+
+  // remove leading slash
+  $norm = ltrim($norm, '/'); // now: uploads/profile_photos/xxx.jpg
+
+  // absolute disk path
+  $abs = __DIR__ . '/../' . $norm;
+
   if (file_exists($abs)) {
     $profilePicExists = true;
+
+    // web URL from homepage.php
+    $profilePicUrl = "../" . $norm . "?v=" . filemtime($abs);
   }
 }
 ?>
@@ -303,7 +306,6 @@ if ($isLoggedIn && !empty($profilePic)) {
       letter-spacing: -0.02em;
     }
 
-    /* avatar container (works for initials OR image) */
     .avatar {
       width: 40px;
       height: 40px;
@@ -486,7 +488,7 @@ if ($isLoggedIn && !empty($profilePic)) {
           <a href="profile.php" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:12px;">
             <div class="avatar">
               <?php if ($profilePicExists && !empty($profilePicUrl)): ?>
-                <img src="<?php echo clean($profilePicUrl) . '?v=' . time(); ?>" alt="Profile picture">
+                <img src="<?php echo clean($profilePicUrl); ?>" alt="Profile picture">
               <?php else: ?>
                 <?php echo clean($initials); ?>
               <?php endif; ?>
@@ -533,7 +535,7 @@ if ($isLoggedIn && !empty($profilePic)) {
                 <div class="muted" style="font-weight:800; font-size:12px; margin-bottom:8px;">
                   Saved path:
                   <span style="font-weight:900;">
-                    <?php echo $profilePic ? clean($profilePic) : "None yet"; ?>
+                    <?php echo $profilePhoto ? clean($profilePhoto) : "None yet"; ?>
                   </span>
                 </div>
 
@@ -572,6 +574,8 @@ if ($isLoggedIn && !empty($profilePic)) {
       </div>
     </div>
 
+    <!-- (rest of your page stays exactly the same) -->
+
     <!-- Hero -->
     <div class="glass hero">
       <div class="kicker">📚 Built for students</div>
@@ -600,6 +604,8 @@ if ($isLoggedIn && !empty($profilePic)) {
         Scroll to features
       </a>
     </div>
+
+    <!-- (everything below unchanged) -->
 
     <!-- Main grid: preview + highlights -->
     <div class="grid" id="preview">
