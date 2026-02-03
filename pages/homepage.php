@@ -1,9 +1,167 @@
 <?php
 // pages/homepage.php
 session_start();
+
 $isLoggedIn = isset($_SESSION['email']);
 $email = $isLoggedIn ? $_SESSION['email'] : '';
+
 function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
+
+// ✅ CSRF token (for upload form)
+if (empty($_SESSION['csrf'])) {
+  $_SESSION['csrf'] = bin2hex(random_bytes(16));
+}
+$csrf = $_SESSION['csrf'];
+
+function require_csrf() {
+  if (!isset($_POST['csrf']) || !hash_equals($_SESSION['csrf'], $_POST['csrf'])) {
+    http_response_code(403);
+    die("Invalid CSRF token");
+  }
+}
+
+// ✅ Toast messaging
+$message = "";
+$toastClass = "";
+
+// ✅ Profile fields
+$profileUsername = "";
+$profileName = "";
+$profilePic = "";      // stores relative path like "uploads/profile_pics/xyz.jpg"
+$initials = "U";
+
+// ✅ Handle profile picture upload
+if ($isLoggedIn && $_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['action'] ?? '') === 'upload_pic') {
+  require_csrf();
+  include __DIR__ . '/../database/db_connect.php';
+
+  if (!isset($_FILES['profile_pic']) || $_FILES['profile_pic']['error'] !== UPLOAD_ERR_OK) {
+    $message = "Please choose an image to upload.";
+    $toastClass = "bg-warning";
+  } else {
+    $file = $_FILES['profile_pic'];
+
+    // Basic validation
+    if ($file['size'] > 2 * 1024 * 1024) { // 2MB
+      $message = "Image too large (max 2MB).";
+      $toastClass = "bg-warning";
+    } else {
+      $finfo = new finfo(FILEINFO_MIME_TYPE);
+      $mime = $finfo->file($file['tmp_name']);
+
+      $allowed = [
+        'image/jpeg' => 'jpg',
+        'image/png'  => 'png',
+        'image/webp' => 'webp'
+      ];
+
+      if (!isset($allowed[$mime])) {
+        $message = "Only JPG, PNG, or WEBP images are allowed.";
+        $toastClass = "bg-warning";
+      } else {
+        // Ensure upload directory exists
+        $uploadDir = __DIR__ . '/../uploads/profile_pics';
+        if (!is_dir($uploadDir)) {
+          @mkdir($uploadDir, 0755, true);
+        }
+
+        // Create safe unique filename
+        $ext = $allowed[$mime];
+        $safeName = bin2hex(random_bytes(16)) . "." . $ext;
+
+        // Absolute path to save on server
+        $destAbs = $uploadDir . '/' . $safeName;
+
+        // Relative path to store in DB (used in <img src="...">)
+        $destRel = 'uploads/profile_pics/' . $safeName;
+
+        if (!move_uploaded_file($file['tmp_name'], $destAbs)) {
+          $message = "Upload failed. Check folder permissions.";
+          $toastClass = "bg-danger";
+        } else {
+          // Save to DB (profile_pic column)
+          try {
+            $stmt = $conn->prepare("UPDATE userdata SET profile_pic=? WHERE email=? LIMIT 1");
+            $stmt->bind_param("ss", $destRel, $email);
+
+            if ($stmt->execute()) {
+              $message = "Profile picture updated!";
+              $toastClass = "bg-success";
+            } else {
+              $message = "Could not save image path to database.";
+              $toastClass = "bg-danger";
+            }
+
+            $stmt->close();
+          } catch (Throwable $e) {
+            $message = "Database column 'profile_pic' is missing. Run the SQL (Option A) to add it.";
+            $toastClass = "bg-warning";
+          }
+        }
+      }
+    }
+  }
+
+  $conn->close();
+}
+
+// ✅ Fetch profile fields for display
+if ($isLoggedIn) {
+  include __DIR__ . '/../database/db_connect.php';
+
+  // Try to read username + display_name + profile_pic safely
+  try {
+    $stmt = $conn->prepare("SELECT username, display_name, profile_pic FROM userdata WHERE email=? LIMIT 1");
+  } catch (Throwable $e) {
+    // fallback if columns don't exist yet
+    try {
+      $stmt = $conn->prepare("SELECT username, display_name FROM userdata WHERE email=? LIMIT 1");
+    } catch (Throwable $e2) {
+      $stmt = $conn->prepare("SELECT username FROM userdata WHERE email=? LIMIT 1");
+    }
+  }
+
+  $stmt->bind_param("s", $email);
+  $stmt->execute();
+  $res = $stmt->get_result();
+
+  if ($row = $res->fetch_assoc()) {
+    $profileUsername = $row['username'] ?? "";
+    $profileName = $row['display_name'] ?? "";
+    $profilePic = $row['profile_pic'] ?? "";
+  }
+
+  $stmt->close();
+  $conn->close();
+
+  // initials from display_name > username > email
+  $src = trim($profileName) ?: (trim($profileUsername) ?: $email);
+  $src = preg_replace('/[^a-zA-Z0-9\s]/', ' ', $src);
+  $parts = array_values(array_filter(preg_split('/\s+/', $src)));
+
+  if (count($parts) >= 2) {
+    $initials = strtoupper(substr($parts[0], 0, 1) . substr($parts[1], 0, 1));
+  } else {
+    $initials = strtoupper(substr($parts[0] ?? $src, 0, 2));
+  }
+  if ($initials === "") $initials = "U";
+}
+
+// ✅ Build profile image URL if saved
+$profilePicUrl = "";
+if ($isLoggedIn && !empty($profilePic)) {
+  // homepage.php is inside /pages, so "../" gets you back to project root
+  $profilePicUrl = "../" . ltrim($profilePic, "/");
+}
+
+// ✅ Extra safety: only show <img> if the file exists on disk
+$profilePicExists = false;
+if ($isLoggedIn && !empty($profilePic)) {
+  $abs = __DIR__ . '/../' . ltrim($profilePic, '/');
+  if (file_exists($abs)) {
+    $profilePicExists = true;
+  }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -131,7 +289,6 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       justify-content: space-between;
       gap: 12px;
       padding: 14px 14px;
-
       position: sticky;
       top: 14px;
       z-index: 5000;
@@ -146,12 +303,24 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       letter-spacing: -0.02em;
     }
 
-    .brand img {
-      width: 36px;
-      height: 36px;
-      border-radius: 12px;
-      object-fit: cover;
+    /* avatar container (works for initials OR image) */
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      background: var(--chip);
       border: 1px solid var(--card-border);
+      font-weight: 950;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
     }
 
     .brand small {
@@ -227,7 +396,6 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       z-index: 9999 !important;
-
       transform: translateY(6px);
       animation: dropdownFade 0.15s ease-out;
     }
@@ -240,201 +408,45 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
     .dropdown-item { color: var(--text); font-weight: 700; }
     .dropdown-item:hover { background: var(--chip); }
 
-    .hero {
-      margin-top: 16px;
-      padding: 26px;
-      position: relative;
+    .toast-wrap{
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      z-index: 20000;
+      width: 420px;
+      max-width: calc(100% - 36px);
     }
 
-    .hero h1 {
-      font-weight: 950;
-      letter-spacing: -0.03em;
-      line-height: 1.05;
-      margin: 0 0 10px;
-      font-size: clamp(28px, 4.2vw, 44px);
-    }
-
-    .hero p {
-      margin: 0;
-      color: var(--muted);
-      font-weight: 700;
-      font-size: 15px;
-      max-width: 62ch;
-    }
-
-    .hero-cta {
-      margin-top: 18px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-    }
-
-    .hero-note {
-      margin-top: 10px;
-      color: var(--muted);
-      font-weight: 700;
-      font-size: 12px;
-    }
-
-    .scroll-arrow {
-      margin-top: 16px;
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      text-decoration: none;
-      color: var(--text);
-      font-weight: 900;
-
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 999px;
-      padding: 10px 14px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.12);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-    }
-
+    /* keep your original hero/sections css (unchanged) */
+    .hero { margin-top: 16px; padding: 26px; position: relative; }
+    .hero h1 { font-weight: 950; letter-spacing: -0.03em; line-height: 1.05; margin: 0 0 10px; font-size: clamp(28px, 4.2vw, 44px); }
+    .hero p { margin: 0; color: var(--muted); font-weight: 700; font-size: 15px; max-width: 62ch; }
+    .hero-cta { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .hero-note { margin-top: 10px; color: var(--muted); font-weight: 700; font-size: 12px; }
+    .scroll-arrow { margin-top: 16px; display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 900; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 999px; padding: 10px 14px; box-shadow: 0 10px 25px rgba(0,0,0,0.12); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
     .scroll-arrow:hover { filter: brightness(0.95); }
-
-    .scroll-bubble {
-      width: 34px;
-      height: 34px;
-      border-radius: 999px;
-      display: grid;
-      place-items: center;
-      background: var(--chip);
-      border: 1px solid var(--card-border);
-      font-size: 16px;
-      animation: bounce 1.4s ease-in-out infinite;
-    }
-
-    @keyframes bounce {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(4px); }
-    }
-
-    .grid {
-      margin-top: 14px;
-      display: grid;
-      gap: 14px;
-      grid-template-columns: 1.1fr 0.9fr;
-    }
-
-    @media (max-width: 900px) {
-      .grid { grid-template-columns: 1fr; }
-    }
-
+    .scroll-bubble { width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; background: var(--chip); border: 1px solid var(--card-border); font-size: 16px; animation: bounce 1.4s ease-in-out infinite; }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
+    .grid { margin-top: 14px; display: grid; gap: 14px; grid-template-columns: 1.1fr 0.9fr; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
     .card-pad { padding: 18px; }
-
-    .kicker {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      background: var(--chip);
-      padding: 8px 10px;
-      border-radius: 999px;
-      font-weight: 900;
-      margin-bottom: 10px;
-    }
-
+    .kicker { display: inline-flex; align-items: center; gap: 8px; background: var(--chip); padding: 8px 10px; border-radius: 999px; font-weight: 900; margin-bottom: 10px; }
     .preview { padding: 18px; }
-
-    .fake-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    .fake-pill {
-      background: var(--chip);
-      border: 1px solid var(--card-border);
-      padding: 8px 10px;
-      border-radius: 999px;
-      font-weight: 900;
-      font-size: 12px;
-    }
-
-    .fake-task {
-      border: 1px solid var(--card-border);
-      background: rgba(255,255,255,0.12);
-      border-radius: 14px;
-      padding: 12px;
-      margin-bottom: 10px;
-    }
-    [data-theme="dark"] .fake-task {
-      background: rgba(17,24,39,0.35);
-    }
-
-    .fake-task h6 {
-      margin: 0 0 6px;
-      font-weight: 950;
-      letter-spacing: -0.01em;
-    }
-
+    .fake-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+    .fake-pill { background: var(--chip); border: 1px solid var(--card-border); padding: 8px 10px; border-radius: 999px; font-weight: 900; font-size: 12px; }
+    .fake-task { border: 1px solid var(--card-border); background: rgba(255,255,255,0.12); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+    [data-theme="dark"] .fake-task { background: rgba(17,24,39,0.35); }
+    .fake-task h6 { margin: 0 0 6px; font-weight: 950; letter-spacing: -0.01em; }
     .muted { color: var(--muted); }
-
-    .tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 7px 9px;
-      border-radius: 999px;
-      font-weight: 900;
-      background: var(--chip);
-      border: 1px solid var(--card-border);
-      font-size: 12px;
-    }
-
-    .section {
-      margin-top: 14px;
-      padding: 18px;
-      scroll-margin-top: 96px;
-    }
-
-    .section h3 {
-      font-weight: 950;
-      margin: 0 0 10px;
-      letter-spacing: -0.02em;
-    }
-
-    .features {
-      display: grid;
-      gap: 12px;
-      grid-template-columns: repeat(3, 1fr);
-    }
-
-    @media (max-width: 900px) {
-      .features { grid-template-columns: 1fr; }
-    }
-
-    .feature {
-      padding: 16px;
-      border-radius: 16px;
-      border: 1px solid var(--card-border);
-      background: rgba(255,255,255,0.12);
-    }
+    .tag { display: inline-flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 999px; font-weight: 900; background: var(--chip); border: 1px solid var(--card-border); font-size: 12px; }
+    .section { margin-top: 14px; padding: 18px; scroll-margin-top: 96px; }
+    .section h3 { font-weight: 950; margin: 0 0 10px; letter-spacing: -0.02em; }
+    .features { display: grid; gap: 12px; grid-template-columns: repeat(3, 1fr); }
+    @media (max-width: 900px) { .features { grid-template-columns: 1fr; } }
+    .feature { padding: 16px; border-radius: 16px; border: 1px solid var(--card-border); background: rgba(255,255,255,0.12); }
     [data-theme="dark"] .feature { background: rgba(17,24,39,0.35); }
-
-    .feature h5 {
-      margin: 0 0 6px;
-      font-weight: 950;
-    }
-
-    .footer {
-      margin-top: 14px;
-      padding: 16px 18px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-      justify-content: space-between;
-      color: var(--muted);
-      font-weight: 800;
-      font-size: 13px;
-    }
+    .feature h5 { margin: 0 0 6px; font-weight: 950; }
+    .footer { margin-top: 14px; padding: 16px 18px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; color: var(--muted); font-weight: 800; font-size: 13px; }
   </style>
 </head>
 
@@ -447,58 +459,116 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
   </div>
   <div class="noise" aria-hidden="true"></div>
 
+  <?php if ($message): ?>
+    <div class="toast-wrap">
+      <div class="toast align-items-center text-white <?php echo $toastClass; ?> border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+          <div class="toast-body"><?php echo clean($message); ?></div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+      </div>
+    </div>
+  <?php endif; ?>
+
   <div class="page">
 
     <!-- Topbar -->
     <div class="glass topbar">
       <div class="brand">
-        <img src="../logo.png" alt="Logo">
-        <div>
-          Student Task Tracker
-          <small><?php echo $isLoggedIn ? "Signed in as " . clean($email) : "Plan, track, and finish your school work"; ?></small>
-        </div>
+        <?php if (!$isLoggedIn): ?>
+          <img src="../logo.png" alt="Logo" style="width:36px; height:36px; border-radius:12px; border:1px solid var(--card-border);">
+          <div>
+            Student Task Tracker
+            <small>Plan, track, and finish your school work</small>
+          </div>
+        <?php else: ?>
+          <!-- ✅ TOP LEFT PROFILE (avatar + name + username) -->
+          <a href="profile.php" style="text-decoration:none; color:inherit; display:flex; align-items:center; gap:12px;">
+            <div class="avatar">
+              <?php if ($profilePicExists && !empty($profilePicUrl)): ?>
+                <img src="<?php echo clean($profilePicUrl) . '?v=' . time(); ?>" alt="Profile picture">
+              <?php else: ?>
+                <?php echo clean($initials); ?>
+              <?php endif; ?>
+            </div>
+            <div>
+              <?php echo clean($profileName ?: "Your profile"); ?>
+              <small>
+                <?php echo $profileUsername ? ("@" . clean($profileUsername) . " • ") : ""; ?>
+                <?php echo clean($email); ?>
+              </small>
+            </div>
+          </a>
+        <?php endif; ?>
       </div>
 
       <div class="right-actions">
-
         <?php if (!$isLoggedIn): ?>
-          <!-- NOT LOGGED IN: show login + create -->
           <a class="btn-ghost" href="login.php">Login</a>
           <a class="btn-main" href="register.php">Create Account</a>
-
         <?php else: ?>
-          <!-- LOGGED IN: show settings + 3-bar menu -->
+
+          <!-- Settings dropdown -->
           <div class="dropdown">
             <button class="icon-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Settings">
               ⚙
             </button>
-            <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:240px;">
+            <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:320px;">
               <li class="px-2 py-2" style="font-weight:900;">Settings</li>
               <li><hr class="dropdown-divider my-1"></li>
+
               <li class="px-2 py-2 d-flex align-items-center justify-content-between">
                 <span style="font-weight:900;">App Appearance</span>
                 <button class="btn btn-sm btn-main" type="button" id="themeBtn">Toggle</button>
               </li>
-              <li>
-                <a class="dropdown-item" href="reset_password.php">Change Password</a>
+
+              <li><a class="dropdown-item" href="reset_password.php">Change Password</a></li>
+
+              <li><hr class="dropdown-divider my-1"></li>
+
+              <!-- ✅ Upload profile picture + show path -->
+              <li class="px-2 py-2" style="font-weight:900;">Profile picture</li>
+
+              <li class="px-2 pb-2">
+                <div class="muted" style="font-weight:800; font-size:12px; margin-bottom:8px;">
+                  Saved path:
+                  <span style="font-weight:900;">
+                    <?php echo $profilePic ? clean($profilePic) : "None yet"; ?>
+                  </span>
+                </div>
+
+                <form method="post" enctype="multipart/form-data" class="d-grid" style="gap:10px;">
+                  <input type="hidden" name="csrf" value="<?php echo clean($csrf); ?>">
+                  <input type="hidden" name="action" value="upload_pic">
+
+                  <input class="form-control" type="file" name="profile_pic" accept="image/png,image/jpeg,image/webp" required>
+
+                  <button class="btn-main" type="submit">Upload picture</button>
+
+                  <div class="muted" style="font-weight:800; font-size:12px;">
+                    JPG / PNG / WEBP • Max 2MB
+                  </div>
+                </form>
               </li>
             </ul>
           </div>
 
+          <!-- 3-bar menu -->
           <div class="dropdown">
             <button class="icon-btn dropdown-toggle hamburger-btn" data-bs-toggle="dropdown" aria-expanded="false" title="Menu">
               &#9776;
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
               <li><a class="dropdown-item" href="homepage.php">Home</a></li>
+              <li><a class="dropdown-item" href="profile.php">Profile</a></li>
               <li><a class="dropdown-item" href="../tasks/index.php">Dashboard</a></li>
               <li><a class="dropdown-item" href="../tasks/index.php#tasks">Tasks</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item" href="logout.php">Log out</a></li>
             </ul>
           </div>
-        <?php endif; ?>
 
+        <?php endif; ?>
       </div>
     </div>
 
@@ -517,7 +587,7 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
           <a class="btn-ghost" href="login.php">I already have an account</a>
         <?php else: ?>
           <a class="btn-main" href="../tasks/index.php">Open my task dashboard</a>
-          <a class="btn-ghost" href="reset_password.php">Change password</a>
+          <a class="btn-ghost" href="profile.php">Edit my profile</a>
         <?php endif; ?>
       </div>
 
@@ -651,6 +721,7 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
           <a href="reset_password.php" style="color:var(--link); text-decoration:none;">Reset Password</a>
         <?php else: ?>
           <a href="../tasks/index.php" style="color:var(--link); text-decoration:none;">Open App</a>
+          <a href="profile.php" style="color:var(--link); text-decoration:none;">Profile</a>
           <a href="reset_password.php" style="color:var(--link); text-decoration:none;">Change Password</a>
           <a href="logout.php" style="color:var(--link); text-decoration:none;">Log out</a>
         <?php endif; ?>
@@ -679,6 +750,13 @@ function clean($s) { return htmlspecialchars($s ?? "", ENT_QUOTES, 'UTF-8'); }
         root.setAttribute('data-theme', next);
         localStorage.setItem('theme', next);
       });
+    })();
+
+    // Toast show (Bootstrap)
+    (function () {
+      const toastElList = [].slice.call(document.querySelectorAll('.toast'));
+      const toastList = toastElList.map(t => new bootstrap.Toast(t, { delay: 3000 }));
+      toastList.forEach(t => t.show());
     })();
 
     // Click-outside-to-close dropdowns (extra-safe)
