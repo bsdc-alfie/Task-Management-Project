@@ -46,7 +46,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 session_start();
                 $_SESSION['email'] = $email;
 
-                header("Location: ../tasks/index.php");
+                header("Location: ../pages/homepage.php");
                 exit();
             } else {
                 $message = "Incorrect password";
