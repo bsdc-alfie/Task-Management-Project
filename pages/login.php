@@ -413,12 +413,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         <div class="or">OR</div>
 
-        <!-- Microsoft wired to a real redirect file -->
-        <a class="ms-btn" href="microsoft_login.php">
-          <span class="ms-square" aria-hidden="true">
+        <!-- Microsoft login -->
+        <a class="ms-btn" href="microsoft_login.php" id="msLoginBtn">
+          <span class="ms-square" aria-hidden="true" id="msIcon">
             <span></span><span></span><span></span><span></span>
           </span>
-          Continue with Microsoft
+          <span id="msLabel">Continue with Microsoft</span>
         </a>
 
         <div class="links">
@@ -446,6 +446,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         const isHidden = pw.getAttribute('type') === 'password';
         pw.setAttribute('type', isHidden ? 'text' : 'password');
         btn.textContent = isHidden ? 'Hide' : 'Show';
+      });
+    })();
+
+    // Microsoft button loading state
+    (function () {
+      const btn = document.getElementById('msLoginBtn');
+      const label = document.getElementById('msLabel');
+      const icon = document.getElementById('msIcon');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        icon.style.display = 'none';
+        label.textContent = 'Connecting to Microsoft…';
+        btn.style.opacity = '0.75';
+        btn.style.pointerEvents = 'none';
       });
     })();
 

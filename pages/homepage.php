@@ -591,6 +591,67 @@ function due_human($ymd) {
       background: var(--chip);
       border: 1px solid var(--card-border);
     }
+
+    /* Stat card colour accents */
+    .stat-card.stat-red {
+      border-left: 4px solid #ef4444;
+      background: rgba(239,68,68,0.10);
+    }
+    [data-theme="dark"] .stat-card.stat-red {
+      background: rgba(239,68,68,0.15);
+    }
+    .stat-card.stat-red .stat-num { color: #ef4444; }
+
+    .stat-card.stat-amber {
+      border-left: 4px solid #f59e0b;
+      background: rgba(245,158,11,0.10);
+    }
+    [data-theme="dark"] .stat-card.stat-amber {
+      background: rgba(245,158,11,0.15);
+    }
+    .stat-card.stat-amber .stat-num { color: #d97706; }
+
+    .stat-card.stat-blue {
+      border-left: 4px solid #3b82f6;
+      background: rgba(59,130,246,0.10);
+    }
+    [data-theme="dark"] .stat-card.stat-blue {
+      background: rgba(59,130,246,0.15);
+    }
+    .stat-card.stat-blue .stat-num { color: #3b82f6; }
+
+    .stat-card.stat-grey {
+      border-left: 4px solid #9ca3af;
+      background: rgba(156,163,175,0.10);
+    }
+    [data-theme="dark"] .stat-card.stat-grey {
+      background: rgba(156,163,175,0.15);
+    }
+    .stat-card.stat-grey .stat-num { color: #9ca3af; }
+
+    /* Priority badge colours */
+    .tiny.prio-high {
+      background: rgba(239,68,68,0.15);
+      border-color: rgba(239,68,68,0.35);
+      color: #ef4444;
+    }
+    .tiny.prio-medium {
+      background: rgba(245,158,11,0.15);
+      border-color: rgba(245,158,11,0.35);
+      color: #d97706;
+    }
+    .tiny.prio-low {
+      background: rgba(34,197,94,0.15);
+      border-color: rgba(34,197,94,0.35);
+      color: #16a34a;
+    }
+
+    /* Due date "Today" badge */
+    .tiny.due-today {
+      background: rgba(239,68,68,0.15);
+      border-color: rgba(239,68,68,0.35);
+      color: #ef4444;
+    }
   </style>
 </head>
 
@@ -801,7 +862,7 @@ function due_human($ymd) {
 
           <!-- Stats -->
           <div class="stat-grid">
-            <a class="stat-card" href="../tasks/index.php#tasks" style="text-decoration:none; color:inherit;">
+            <a class="stat-card stat-red" href="../tasks/index.php#tasks" style="text-decoration:none; color:inherit;">
               <div class="stat-top">
                 <span>Overdue</span>
                 <span class="tiny">⚠</span>
@@ -810,7 +871,7 @@ function due_human($ymd) {
               <div class="stat-sub">Tasks past the due date</div>
             </a>
 
-            <a class="stat-card" href="../tasks/index.php#tasks" style="text-decoration:none; color:inherit;">
+            <a class="stat-card stat-amber" href="../tasks/index.php#tasks" style="text-decoration:none; color:inherit;">
               <div class="stat-top">
                 <span>Due today</span>
                 <span class="tiny">📌</span>
@@ -819,7 +880,7 @@ function due_human($ymd) {
               <div class="stat-sub"><?php echo clean($today->format('D j M')); ?></div>
             </a>
 
-            <a class="stat-card" href="../tasks/calendar.php" style="text-decoration:none; color:inherit;">
+            <a class="stat-card stat-blue" href="../tasks/calendar.php" style="text-decoration:none; color:inherit;">
               <div class="stat-top">
                 <span>Next 7 days</span>
                 <span class="tiny">📅</span>
@@ -828,7 +889,7 @@ function due_human($ymd) {
               <div class="stat-sub">Coming up soon</div>
             </a>
 
-            <a class="stat-card" href="../tasks/index.php#tasks" style="text-decoration:none; color:inherit;">
+            <a class="stat-card stat-grey" href="../tasks/index.php#tasks" style="text-decoration:none; color:inherit;">
               <div class="stat-top">
                 <span>No due date</span>
                 <span class="tiny">—</span>
@@ -868,8 +929,12 @@ function due_human($ymd) {
                     <?php endif; ?>
                   </div>
                   <div class="mini-right">
-                    <span class="tiny"><?php echo clean($dueText); ?></span>
-                    <span class="tiny"><?php echo clean(prio_tag($p)); ?></span>
+                    <span class="tiny<?php echo ($d === $todayStr) ? ' due-today' : ''; ?>"><?php echo clean($dueText); ?></span>
+                    <span class="tiny<?php
+                      if ($p === 'High') echo ' prio-high';
+                      elseif ($p === 'Low') echo ' prio-low';
+                      else echo ' prio-medium';
+                    ?>"><?php echo clean(prio_tag($p)); ?></span>
                   </div>
                 </div>
               <?php endforeach; ?>
